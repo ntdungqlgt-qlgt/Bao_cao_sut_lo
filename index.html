@@ -284,7 +284,7 @@ function renderCamera(){
   return `
   <div class="sec-label">📷 Chụp ảnh hiện trường</div>
   <div class="cam-wrap" id="camWrap">
-    <video id="liveVideo" autoplay playsinline muted></video>
+    <video id="liveVideo" autoplay playsinline muted webkit-playsinline x5-playsinline style="width:100%;height:100%;object-fit:cover;display:block;background:#000;"></video>
     <div class="cam-frame">
       <div class="cam-corner tl"></div><div class="cam-corner tr"></div>
       <div class="cam-corner bl"></div><div class="cam-corner br"></div>
@@ -471,17 +471,48 @@ function selectFromGallery(){
 
 async function startCamera(){
   try {
-    const constraints = { video: { facingMode:"environment", width:{ideal:1920}, height:{ideal:1080} } };
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    // iOS Safari cần constraints đơn giản hơn
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal:"environment" } },
+        audio: false
+      });
+    } catch(e1){
+      // Fallback: thử không chỉ định facingMode
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    }
     state.stream = stream;
     const video = document.getElementById("liveVideo");
-    if(video){ video.srcObject = stream; await video.play(); }
+    if(!video) return;
+
+    video.srcObject = stream;
+    video.setAttribute("autoplay","");
+    video.setAttribute("muted","");
+    video.setAttribute("playsinline","");
+
+    // iOS Safari cần được trigger play sau khi srcObject gán
+    video.onloadedmetadata = async ()=>{
+      try { await video.play(); } catch(e){ console.log("play error",e); }
+    };
+
+    // Fallback thêm nếu onloadedmetadata không kích hoạt
+    setTimeout(async ()=>{
+      if(video.paused){
+        try { await video.play(); } catch(e){}
+      }
+    }, 800);
+
   } catch(err){
     stopStream();
     let msg = "Không mở được camera. ";
-    if(err.name==="NotAllowedError") msg += "Bạn cần cấp quyền camera cho trình duyệt. Kiểm tra cài đặt quyền.";
-    else if(err.name==="NotFoundError") msg += "Không tìm thấy camera.";
-    else msg += err.message + ". Thử dùng nút 'Chọn ảnh từ thư viện'.";
+    if(err.name==="NotAllowedError" || err.name==="PermissionDeniedError"){
+      msg += "Cần cấp quyền camera: Vào Cài đặt iPhone → Safari → Camera → Cho phép.";
+    } else if(err.name==="NotFoundError"){
+      msg += "Không tìm thấy camera trên thiết bị.";
+    } else {
+      msg += err.message + ". Hãy dùng nút 'Chọn ảnh từ thư viện'.";
+    }
     setState({screen:"home", error:msg});
   }
 }
