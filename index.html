@@ -91,8 +91,10 @@ const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-20250514";
 const LS_URL = "sutlo_sheets_url";
 const LS_FORM = "sutlo_saved_reporter";
+const LS_KEY = "sutlo_api_key";
 
 let state = {
+  apiKey: "",
   screen: "home",
   sheetsUrl: "",
   form: { tenDuong:"", lyTrinh:"", nguoiBaoCao:"", donVi:"", ghiChu:"" },
@@ -111,6 +113,7 @@ function loadSaved(){
     if(saved.donVi) state.form.donVi = saved.donVi;
   } catch(e){}
   state.settingsUrl = state.sheetsUrl;
+  state.apiKey = localStorage.getItem(LS_KEY)||"";
 }
 
 function savePersist(){
@@ -214,6 +217,11 @@ function renderSettings(){
     <div class="fld" style="margin-top:12px">
       <label>URL Web App (dán sau khi deploy)</label>
       <input type="url" id="settingsUrl" value="${state.settingsUrl}" placeholder="https://script.google.com/macros/s/..." style="font-size:13px;">
+    </div>
+    <div class="fld" style="margin-top:12px">
+      <label>🔑 Anthropic API Key</label>
+      <input type="password" id="apiKeyInput" value="${state.apiKey}" placeholder="sk-ant-..." style="font-size:13px;">
+      <div style="font-size:11px;color:#888;margin-top:4px">Lấy tại: <strong>console.anthropic.com</strong> → API Keys (tặng $5 miễn phí)</div>
     </div>
     <button class="btn btn-orange" onclick="saveSettings()">💾 Lưu Cấu Hình</button>
   </div>`;
@@ -425,6 +433,8 @@ function attachHandlers(){
   });
   const su = document.getElementById("settingsUrl");
   if(su) su.addEventListener("input", e=>{ state.settingsUrl = e.target.value; });
+  const ak = document.getElementById("apiKeyInput");
+  if(ak) ak.addEventListener("input", e=>{ state.apiKey = e.target.value; });
 
   document.getElementById("fileInput").onchange = handleFileInput;
 }
@@ -433,12 +443,15 @@ function setState(updates){ Object.assign(state, updates); render(); }
 
 function goSettings(){
   state.settingsUrl = state.sheetsUrl;
+  state.apiKey = localStorage.getItem(LS_KEY)||"";
   setState({screen:"settings",error:""});
 }
 
 function saveSettings(){
   if(!state.settingsUrl){ alert("Vui lòng dán URL Web App vào ô trên!"); return; }
+  if(!state.apiKey){ alert("Vui lòng nhập Anthropic API Key!"); return; }
   state.sheetsUrl = state.settingsUrl;
+  try{ localStorage.setItem(LS_KEY, state.apiKey); }catch(e){}
   savePersist();
   setState({screen:"home",error:""});
 }
@@ -578,9 +591,11 @@ async function analyzeImage(){
     const base64 = state.image.split(",")[1];
     const mtype = state.image.startsWith("data:image/png")?"image/png":"image/jpeg";
 
+    const apiKey = state.apiKey || localStorage.getItem(LS_KEY) || "";
+    if(!apiKey){ setState({screen:"preview", error:"Chưa có API Key! Nhấn ⚙ để nhập API Key của Anthropic."}); return; }
     const res = await fetch(ANTHROPIC_API,{
       method:"POST",
-      headers:{"Content-Type":"application/json"},
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
       body: JSON.stringify({
         model: MODEL,
         max_tokens: 800,
